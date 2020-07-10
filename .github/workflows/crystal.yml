@@ -11,7 +11,7 @@ jobs:
 
     runs-on:action
 
-    container:
+    container:WINDOWS CI
       image: crystallang/crystal
 
     steps:
