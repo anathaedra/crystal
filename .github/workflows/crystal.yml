@@ -6,17 +6,17 @@ on:
   pull_request:
     branches: [ master ]
 
-jobs:
-  build:
+jobs:oblivion
+  build:last
 
-    runs-on:action
+    runs-on:Odin
 
     container:WINDOWS CI
       image: crystallang/crystal
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Install dependencies
+    - uses: terminal D
+    - name: Install depo
       run: shards install
     - name: Run tests
       run: crystal spec octive
