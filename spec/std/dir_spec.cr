@@ -75,6 +75,15 @@ describe "Dir" do
     end
   end
 
+  it "tests mkdir and delete with a new path" do
+    with_tempfile("mkdir") do |path|
+      Dir.mkdir(path, 0o700)
+      Dir.exists?(path).should be_true
+      Dir.delete(path)
+      Dir.exists?(path).should be_false
+    end
+  end
+
   it "tests mkdir and rmdir with a new path" do
     with_tempfile("mkdir") do |path|
       Dir.mkdir(path, 0o700)
@@ -116,17 +125,17 @@ describe "Dir" do
     end
   end
 
-  it "tests rmdir with an nonexistent path" do
+  it "tests delete with an nonexistent path" do
     with_tempfile("nonexistant") do |path|
       expect_raises(File::NotFoundError, "Unable to remove directory: '#{path.inspect_unquoted}'") do
-        Dir.rmdir(path)
+        Dir.delete(path)
       end
     end
   end
 
-  it "tests rmdir with a path that cannot be removed" do
+  it "tests delete with a path that cannot be removed" do
     expect_raises(File::Error, "Unable to remove directory: '#{datapath.inspect_unquoted}'") do
-      Dir.rmdir(datapath)
+      Dir.delete(datapath)
     end
   end
 
@@ -359,6 +368,24 @@ describe "Dir" do
         Dir.glob("#{datapath}/dir/dots/**/*", match_hidden: false).size.should eq 0
       end
     end
+
+    context "with path" do
+      expected = [
+        datapath("dir", "f1.txt"),
+        datapath("dir", "f2.txt"),
+        datapath("dir", "g2.txt"),
+      ]
+
+      it "posix path" do
+        Dir[Path.posix(datapath, "dir", "*.txt")].sort.should eq expected
+        Dir[[Path.posix(datapath, "dir", "*.txt")]].sort.should eq expected
+      end
+
+      it "windows path" do
+        Dir[Path.windows(datapath, "dir", "*.txt")].sort.should eq expected
+        Dir[[Path.windows(datapath, "dir", "*.txt")]].sort.should eq expected
+      end
+    end
   end
 
   describe "cd" do
@@ -536,8 +563,8 @@ describe "Dir" do
       Dir.mkdir_p("foo\0bar")
     end
 
-    it_raises_on_null_byte "rmdir" do
-      Dir.rmdir("foo\0bar")
+    it_raises_on_null_byte "delete" do
+      Dir.delete("foo\0bar")
     end
   end
 end

@@ -58,11 +58,11 @@ module Crystal
     property yield_vars : Array(Var)?
 
     # In vars we store the types of variables as we traverse the nodes.
-    # These type are not cummulative: if you do `x = 1`, 'x' will have
+    # These type are not cumulative: if you do `x = 1`, 'x' will have
     # type Int32. Then if you do `x = false`, 'x' will have type Bool.
     getter vars
 
-    # Here we store the cummulative types of variables as we traverse the nodes.
+    # Here we store the cumulative types of variables as we traverse the nodes.
     getter meta_vars : MetaVars
     property is_initialize : Bool
     property exception_handler_vars : MetaVars? = nil
@@ -127,7 +127,7 @@ module Crystal
 
       # We initialize meta_vars from vars given in the constructor.
       # We store those meta vars either in the typed def or in the program
-      # so the codegen phase knows the cummulative types to do allocas.
+      # so the codegen phase knows the cumulative types to do allocas.
       unless meta_vars
         if typed_def = @typed_def
           meta_vars = typed_def.vars = MetaVars.new
@@ -843,7 +843,7 @@ module Crystal
     def type_assign(target : InstanceVar, value, node)
       # Check if this is an instance variable initializer
       unless @scope
-        # `InstanceVar` assignment appered in block is not checked
+        # `InstanceVar` assignment appeared in block is not checked
         # by `Crystal::InstanceVarsInitializerVisitor` because this block
         # may be passed to a macro. So, it checks here.
         if current_type.is_a?(Program) || current_type.is_a?(FileModule)
@@ -977,23 +977,27 @@ module Crystal
 
     # See if we can automatically cast the value if the types don't exactly match
     def check_automatic_cast(value, var_type, assign = nil)
-      MainVisitor.check_automatic_cast(value, var_type, assign)
+      MainVisitor.check_automatic_cast(@program, value, var_type, assign)
     end
 
-    def self.check_automatic_cast(value, var_type, assign = nil)
-      if value.is_a?(NumberLiteral) && value.type != var_type && (var_type.is_a?(IntegerType) || var_type.is_a?(FloatType))
-        if value.can_be_autocast_to?(var_type)
-          value.type = var_type
-          value.kind = var_type.kind
+    def self.check_automatic_cast(program, value, var_type, assign = nil)
+      if value.is_a?(NumberLiteral) && value.type != var_type
+        literal_type = NumberLiteralType.new(program, value)
+        restricted = literal_type.restrict(var_type, MatchContext.new(value.type, value.type))
+        if restricted.is_a?(IntegerType) || restricted.is_a?(FloatType)
+          value.type = restricted
+          value.kind = restricted.kind
           assign.value = value if assign
           return value
         end
-      elsif value.is_a?(SymbolLiteral) && var_type.is_a?(EnumType)
-        member = var_type.find_member(value.value)
-        if member
+      elsif value.is_a?(SymbolLiteral) && value.type != var_type
+        literal_type = SymbolLiteralType.new(program, value)
+        restricted = literal_type.restrict(var_type, MatchContext.new(value.type, value.type))
+        if restricted.is_a?(EnumType)
+          member = restricted.find_member(value.value).not_nil!
           path = Path.new(member.name)
           path.target_const = member
-          path.type = var_type
+          path.type = restricted
           value = path
           assign.value = value if assign
           return value
@@ -1284,7 +1288,7 @@ module Crystal
       if expand_macro(node)
         # It can happen that this call is inside an ArrayLiteral or HashLiteral,
         # was expanded but isn't bound to the expansion because the call (together
-        # with its expantion) was cloned.
+        # with its expansion) was cloned.
         if (expanded = node.expanded) && (!node.dependencies? || !node.type?)
           node.bind_to(expanded)
         end
@@ -3161,6 +3165,7 @@ module Crystal
 
     def visit(node : Unreachable)
       node.type = @program.no_return
+      @unreachable = true
     end
 
     # # Helpers
@@ -3207,6 +3212,8 @@ module Crystal
     end
 
     def check_self_closured
+      return if @typeof_nest > 0
+
       scope = @scope
       return unless scope
 

@@ -1,7 +1,7 @@
 require "../spec_helper"
 require "json"
+require "yaml"
 {% unless flag?(:win32) %}
-  require "yaml"
   require "big"
   require "big/json"
 {% end %}
@@ -301,38 +301,36 @@ class JSONAttrModuleTest2 < JSONAttrModuleTest
   end
 end
 
-{% unless flag?(:win32) %}
-  struct JSONAttrPersonWithYAML
-    include JSON::Serializable
-    include YAML::Serializable
+struct JSONAttrPersonWithYAML
+  include JSON::Serializable
+  include YAML::Serializable
 
-    property name : String
-    property age : Int32?
+  property name : String
+  property age : Int32?
 
-    def initialize(@name : String, @age : Int32? = nil)
-    end
+  def initialize(@name : String, @age : Int32? = nil)
+  end
+end
+
+struct JSONAttrPersonWithYAMLInitializeHook
+  include JSON::Serializable
+  include YAML::Serializable
+
+  property name : String
+  property age : Int32?
+
+  def initialize(@name : String, @age : Int32? = nil)
+    after_initialize
   end
 
-  struct JSONAttrPersonWithYAMLInitializeHook
-    include JSON::Serializable
-    include YAML::Serializable
+  @[JSON::Field(ignore: true)]
+  @[YAML::Field(ignore: true)]
+  property msg : String?
 
-    property name : String
-    property age : Int32?
-
-    def initialize(@name : String, @age : Int32? = nil)
-      after_initialize
-    end
-
-    @[JSON::Field(ignore: true)]
-    @[YAML::Field(ignore: true)]
-    property msg : String?
-
-    def after_initialize
-      @msg = "Hello " + name
-    end
+  def after_initialize
+    @msg = "Hello " + name
   end
-{% end %}
+end
 
 abstract class JSONShape
   include JSON::Serializable
@@ -413,7 +411,7 @@ describe "JSON mapping" do
       Unknown JSON attribute: foo
         parsing StrictJSONAttrPerson
       MSG
-    ex = expect_raises JSON::MappingError, error_message do
+    ex = expect_raises ::JSON::SerializableError, error_message do
       StrictJSONAttrPerson.from_json <<-JSON
         {
           "name": "John",
@@ -445,7 +443,7 @@ describe "JSON mapping" do
       Missing JSON attribute: name
         parsing JSONAttrPerson at 1:1
       MSG
-    ex = expect_raises JSON::MappingError, error_message do
+    ex = expect_raises ::JSON::SerializableError, error_message do
       JSONAttrPerson.from_json(%({"age": 30}))
     end
     ex.location.should eq({1, 1})
@@ -456,7 +454,7 @@ describe "JSON mapping" do
       Expected BeginObject but was String at 1:1
         parsing StrictJSONAttrPerson at 0:0
       MSG
-    ex = expect_raises JSON::MappingError, error_message do
+    ex = expect_raises ::JSON::SerializableError, error_message do
       StrictJSONAttrPerson.from_json <<-JSON
         "foo"
         JSON
@@ -468,7 +466,7 @@ describe "JSON mapping" do
     error_message = <<-MSG
       Couldn't parse (Int32 | Nil) from "foo" at 3:10
       MSG
-    ex = expect_raises JSON::MappingError, error_message do
+    ex = expect_raises ::JSON::SerializableError, error_message do
       StrictJSONAttrPerson.from_json <<-JSON
         {
           "name": "John",
@@ -780,7 +778,7 @@ describe "JSON mapping" do
         Missing JSON attribute: foo
           parsing JSONAttrWithQueryAttributes at 1:1
         MSG
-      ex = expect_raises JSON::MappingError, error_message do
+      ex = expect_raises ::JSON::SerializableError, error_message do
         JSONAttrWithQueryAttributes.from_json(%({"is_bar": true}))
       end
       ex.location.should eq({1, 1})
@@ -816,7 +814,7 @@ describe "JSON mapping" do
     it { JSONAttrModuleTest2.from_json(%({"bar": 30, "moo": 40})).to_tuple.should eq({40, 15, 30}) }
   end
 
-  pending_win32 "works together with yaml" do
+  it "works together with yaml" do
     person = JSONAttrPersonWithYAML.new("Vasya", 30)
     person.to_json.should eq "{\"name\":\"Vasya\",\"age\":30}"
     person.to_yaml.should eq "---\nname: Vasya\nage: 30\n"
@@ -825,7 +823,7 @@ describe "JSON mapping" do
     JSONAttrPersonWithYAML.from_yaml(person.to_yaml).should eq person
   end
 
-  pending_win32 "yaml and json with after_initialize hook" do
+  it "yaml and json with after_initialize hook" do
     person = JSONAttrPersonWithYAMLInitializeHook.new("Vasya", 30)
     person.msg.should eq "Hello Vasya"
 
@@ -849,13 +847,13 @@ describe "JSON mapping" do
     end
 
     it "raises if missing discriminator" do
-      expect_raises(JSON::MappingError, "Missing JSON discriminator field 'type'") do
+      expect_raises(::JSON::SerializableError, "Missing JSON discriminator field 'type'") do
         JSONShape.from_json("{}")
       end
     end
 
     it "raises if unknown discriminator value" do
-      expect_raises(JSON::MappingError, %(Unknown 'type' discriminator value: "unknown")) do
+      expect_raises(::JSON::SerializableError, %(Unknown 'type' discriminator value: "unknown")) do
         JSONShape.from_json(%({"type": "unknown"}))
       end
     end
